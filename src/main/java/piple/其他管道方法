@@ -1,0 +1,14 @@
+第一步生成命令文件data.txt
+data.txt内容如下
+set a 1
+set b 2
+set c 3
+
+第二步对文件data.txt转码
+1 apt-get install tofrodos  （安装tofrodos）实际上它安装了两个工具：todos（相当于unix2dos），和fromdos（相当于dos2unix）
+2 todos data.txt (转码)
+
+第三步 运行管道批处理
+cat data.txt | src/redis-cli -h 192.168.9.165 -p 6389 --pipe （redis-cli  --pipe  只支持dos文本，所有上面要转码）
+
+data.txt:

@@ -1,0 +1,99 @@
+
+
+
+redis cluster
+
+一个最小的redis集群需要3个主节点，官方建议3个主节点3个从节点
+第一步  启动多台服务
+在redis的安装目录下
+mkdir cluster-test
+cd cluster-test
+mkdir 7000 7001 7002 7003 7004 7005
+
+在每一个对应的目录下放一个redis.conf文件，文件内容除了端口不同，其他都一样
+
+redis.conf 内容如下：（这个是目录下7000的，7001的只要该第一行port 7001就可以，以此类推）
+
+port 7000
+cluster-enabled yes
+cluster-config-file nodes.conf
+cluster-node-timeout 5000
+appendonly yes
+
+然后依次进入不同的目录启动服务
+cd 7000
+../../src/redis-server ./redis.conf
+
+cd 7001
+../../src/redis-server ./redis.conf
+
+………..以此类推
+
+启动后会在相应的目录下生产nodes.conf文件里面包含了每个实例的ID
+
+97a3a64667477371c4479320d683e4c8db5858b1
+
+第二步  创建集群
+
+在redis的安装目录下的src目录
+创建集群命令:
+./redis-trib.rb create --replicas 1 127.0.0.1:7000 127.0.0.1:7001 \
+127.0.0.1:7002 127.0.0.1:7003 127.0.0.1:7004 127.0.0.1:7005
+（这个命令的意思：一个主机对应一个从机）
+注意：如果是在不同机器上测试时，最好把127.0.0.1 改成当前主机的IP（ifconfig 查看当前Ip例如：192.168.9.165）
+
+如果运行报错的话，那可能是因为没有安装ruby
+redis-trib.rb是由ruby语言写的
+
+我用的是ubuntu
+1  apt install ruby
+2  gem install redis
+然后就可以执行上面 创建集群命令
+
+执行完创建集群命令
+[OK] All 16384 slots covered 最后显示这句说明成功了。
+
+
+接下来测试集群
+$ redis-cli -c -p 7000
+redis 127.0.0.1:7000> set foo bar
+-> Redirected to slot [12182] located at 127.0.0.1:7002
+OK
+redis 127.0.0.1:7002> set hello world
+-> Redirected to slot [866] located at 127.0.0.1:7000
+OK
+redis 127.0.0.1:7000> get foo
+-> Redirected to slot [12182] located at 127.0.0.1:7002
+"bar"
+redis 127.0.0.1:7000> get hello
+-> Redirected to slot [866] located at 127.0.0.1:7000
+"world"
+
+我们可以看到在端口7000创建的数据却在端口7002的服务器中保存了。在7002创建的数据却在7000端显示。这个是集群分片的作用。
+不同的服务从1至16384个插槽中分配区间
+假如 7000 的分配为 1-5000
+假如 7001 的分配为 5001-10000
+假如 7002 的分配为 10001-16384
+将不同的key值根据 CRC16 算法去 % 16384 得到的值在哪个分区范围就存放到哪个redis服务中。
+
+
+集群还有其他特性：
+重新分片
+./redis-trib.rb reshard --from <node-id> --to <node-id> --slots <number of slots> --yes <host>:<port>
+
+增加新节点
+主：
+./redis-trib.rb add-node 127.0.0.1:7006 127.0.0.1:7000
+从：
+./redis-trib.rb add-node --slave 127.0.0.1:7006 127.0.0.1:7000
+
+删除新节点
+主：
+先reshard将主 清空数据
+./redis-trib del-node 127.0.0.1:7000 `<node-id>`
+从：
+./redis-trib del-node 127.0.0.1:7000 `<node-id>`
+
+查看各节点状态
+./redis-trib.rb check 127.0.0.1:7000
+
